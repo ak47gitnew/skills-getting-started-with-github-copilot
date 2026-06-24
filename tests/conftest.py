@@ -1,26 +1,10 @@
-"""
-High School Management System API
+import pytest
+from fastapi.testclient import TestClient
+from src.app import app, activities
 
-A super simple FastAPI application that allows students to view and sign up
-for extracurricular activities at Mergington High School.
-"""
 
-from fastapi import FastAPI, HTTPException
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import RedirectResponse
-import os
-from pathlib import Path
-
-app = FastAPI(title="Mergington High School API",
-              description="API for viewing and signing up for extracurricular activities")
-
-# Mount the static files directory
-current_dir = Path(__file__).parent
-app.mount("/static", StaticFiles(directory=os.path.join(Path(__file__).parent,
-          "static")), name="static")
-
-# In-memory activity database
-activities = {
+# Store original activities for reset
+ORIGINAL_ACTIVITIES = {
     "Chess Club": {
         "description": "Learn strategies and compete in chess tournaments",
         "schedule": "Fridays, 3:30 PM - 5:00 PM",
@@ -78,50 +62,18 @@ activities = {
 }
 
 
-@app.get("/")
-def root():
-    return RedirectResponse(url="/static/index.html")
+@pytest.fixture(autouse=True)
+def reset_activities():
+    """Reset activities to original state before each test (Arrange phase)"""
+    activities.clear()
+    activities.update(ORIGINAL_ACTIVITIES)
+    yield
+    # Cleanup after test if needed
+    activities.clear()
+    activities.update(ORIGINAL_ACTIVITIES)
 
 
-@app.get("/activities")
-def get_activities():
-    return activities
-
-
-@app.post("/activities/{activity_name}/signup")
-def signup_for_activity(activity_name: str, email: str):
-    """Sign up a student for an activity"""
-    # Validate activity exists
-    if activity_name not in activities:
-        raise HTTPException(status_code=404, detail="Activity not found")
-
-    # Get the specific activity
-    
-    activity = activities[activity_name]
-
-    # Check if student is already signed up
-    if email in activity["participants"]:
-        raise HTTPException(status_code=409, detail="You are already signed up for this activity")
-
-    # Add student
-    activity["participants"].append(email)
-    return {"message": f"Signed up {email} for {activity_name}"}
-
-
-@app.post("/activities/{activity_name}/unregister")
-def unregister_from_activity(activity_name: str, email: str):
-    """Unregister a student from an activity"""
-    # Validate activity exists
-    if activity_name not in activities:
-        raise HTTPException(status_code=404, detail="Activity not found")
-
-    # Get the specific activity
-    activity = activities[activity_name]
-
-    # Check if student is registered
-    if email not in activity["participants"]:
-        raise HTTPException(status_code=404, detail="Participant not found in this activity")
-
-    # Remove student
-    activity["participants"].remove(email)
-    return {"message": f"Unregistered {email} from {activity_name}"}
+@pytest.fixture
+def client():
+    """Provide TestClient for making HTTP requests"""
+    return TestClient(app)
